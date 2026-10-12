@@ -36,11 +36,11 @@
             <button onclick="switchTab('vault')" id="tab-vault" class="tab-btn active px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all bg-green-500/10 text-green-400 border border-green-500/30">
                 <i data-lucide="layout-grid" class="w-4 h-4"></i> Meine Sammlung
             </button>
-            <button onclick="switchTab('catalog')" id="tab-catalog" class="tab-btn px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all text-zinc-400 hover:text-white hover:bg-zinc-900">
-                <i data-lucide="book-open" class="w-4 h-4"></i> Holy Grail Katalog
-            </button>
             <button onclick="switchTab('health')" id="tab-health" class="tab-btn px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all text-zinc-400 hover:text-white hover:bg-zinc-900">
                 <i data-lucide="heart-pulse" class="w-4 h-4"></i> Health & Koffein
+            </button>
+            <button onclick="switchTab('settings')" id="tab-settings" class="tab-btn px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all text-zinc-400 hover:text-white hover:bg-zinc-900">
+                <i data-lucide="settings" class="w-4 h-4"></i> Einstellungen
             </button>
         </div>
     </header>
@@ -84,30 +84,12 @@
                 <div id="vault-empty" class="text-center py-20 border-2 border-dashed border-zinc-800 rounded-2xl bg-zinc-900/30">
                     <i data-lucide="cup-soda" class="w-12 h-12 text-zinc-600 mx-auto mb-3"></i>
                     <p class="text-zinc-400 font-medium">Deine Sammlung ist noch leer!</p>
-                    <p class="text-zinc-600 text-sm mt-1">Scanne deine erste Monster Dose oder füge sie aus dem Katalog hinzu.</p>
+                    <p class="text-zinc-600 text-sm mt-1">Klicke oben auf "Dose scannen", um deine erste hinzuzufügen.</p>
                 </div>
             </div>
         </section>
 
-        <!-- TAB 2: CATALOG & WISHLIST (Holy Grail) -->
-        <section id="view-catalog" class="space-y-6 hidden">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-900/90 border border-zinc-800 p-4 rounded-2xl">
-                <div>
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i data-lucide="trophy" class="text-amber-400 w-5 h-5"></i>
-                        Holy Grail & Wunschliste
-                    </h2>
-                    <p class="text-xs text-zinc-400 mt-0.5">Entdecke alle bekannten Sorten, markiere Favoriten oder hake ab, was du schon hast.</p>
-                </div>
-                <div class="flex gap-2 w-full sm:w-auto">
-                    <input type="text" id="catalog-search" oninput="renderCatalog()" placeholder="Sorte suchen..." class="bg-zinc-950 border border-zinc-800 px-3 py-1.5 rounded-xl text-sm text-white focus:outline-none focus:border-green-500 w-full sm:w-48">
-                </div>
-            </div>
-
-            <div id="catalog-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"></div>
-        </section>
-
-        <!-- TAB 3: HEALTH & KOFFEIN -->
+        <!-- TAB 2: HEALTH & KOFFEIN -->
         <section id="view-health" class="space-y-6 hidden">
             <div class="bg-zinc-900/90 border border-zinc-800 p-6 rounded-2xl space-y-6">
                 <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
@@ -142,8 +124,35 @@
 
                 <div>
                     <h3 class="font-bold text-white text-sm mb-3">Konsum-Historie (Letzte Dosen)</h3>
-                    <div id="history-list" class="space-y-2">
-                        <!-- Dynamically populated -->
+                    <div id="history-list" class="space-y-2"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: EINSTELLUNGEN & RESET -->
+        <section id="view-settings" class="space-y-6 hidden">
+            <div class="bg-zinc-900/90 border border-zinc-800 p-6 rounded-2xl space-y-6 max-w-2xl mx-auto">
+                <div>
+                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i data-lucide="sliders" class="text-green-400 w-5 h-5"></i>
+                        Einstellungen & App-Daten
+                    </h2>
+                    <p class="text-xs text-zinc-400 mt-1">Verwalte deine lokalen Daten und App-Einstellungen.</p>
+                </div>
+
+                <div class="border-t border-zinc-800 pt-6">
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-2xl p-5 space-y-3">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="trash-2" class="text-red-400 w-6 h-6"></i>
+                            <div>
+                                <h3 class="text-sm font-bold text-red-400">Alle Daten & Statistiken zurücksetzen</h3>
+                                <p class="text-xs text-zinc-400 mt-0.5">Löscht deine komplette Sammlung, alle Bewertungen, Notizen und deine Konsum-Historie.</p>
+                            </div>
+                        </div>
+                        <button onclick="resetApp()" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm flex items-center justify-center gap-2 shadow-lg shadow-red-500/10">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            App komplett zurücksetzen
+                        </button>
                     </div>
                 </div>
             </div>
@@ -182,46 +191,70 @@
         </div>
     </div>
 
-    <!-- Rating & Flavor Notes Modal -->
-    <div id="details-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl p-6 space-y-4">
-            <div class="flex justify-between items-center">
-                <h3 id="detail-title" class="font-bold text-white text-lg">Dosen Details</h3>
+    <!-- ERWEITERTES Rating & Flavor Details Modal -->
+    <div id="details-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-zinc-900 border border-zinc-800 w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl p-6 space-y-5 my-8">
+            <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+                <h3 id="detail-title" class="font-bold text-white text-lg flex items-center gap-2">
+                    <i data-lucide="sparkles" class="text-amber-400 w-5 h-5"></i> Sorte bewerten & anpassen
+                </h3>
                 <button onclick="closeDetailsModal()" class="text-zinc-400 hover:text-white">
                     <i data-lucide="x" class="w-6 h-6"></i>
                 </button>
             </div>
 
-            <div class="flex items-center gap-4 bg-zinc-950 p-4 rounded-xl border border-zinc-800">
-                <img id="detail-img" src="" alt="" class="h-24 object-contain">
+            <!-- Product Header Info -->
+            <div class="flex items-center gap-4 bg-zinc-950 p-4 rounded-2xl border border-zinc-800/80">
+                <img id="detail-img" src="" alt="" class="h-28 object-contain">
                 <div>
-                    <p id="detail-name" class="font-bold text-white text-sm"></p>
+                    <h4 id="detail-name" class="font-bold text-white text-base"></h4>
                     <p id="detail-caffeine" class="text-xs text-zinc-400 mt-1"></p>
-                    <p id="detail-count" class="text-xs text-green-400 font-bold mt-1"></p>
+                    <span id="detail-count" class="inline-block bg-green-500/10 text-green-400 border border-green-500/20 text-xs font-bold px-2.5 py-0.5 rounded-full mt-2"></span>
                 </div>
             </div>
 
-            <div class="space-y-3">
-                <label class="block text-xs font-semibold text-zinc-400 uppercase">Persönliche Sterne-Bewertung</label>
-                <div id="star-rating" class="flex gap-2">
-                    <!-- 5 stars generated via JS -->
+            <!-- Interactive Star Rating -->
+            <div class="space-y-2 bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50 text-center">
+                <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider">Gesamteindruck / Rating</label>
+                <div id="star-rating" class="flex justify-center gap-2 text-3xl"></div>
+                <p id="star-rating-text" class="text-xs font-bold text-amber-400 h-4 mt-1"></p>
+            </div>
+
+            <!-- Taste Profile Sliders (Süße & Säure) -->
+            <div class="space-y-4 bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50">
+                <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider">Geschmacksprofil</label>
+                
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-semibold">
+                        <span class="text-zinc-400">Süße</span>
+                        <span id="sweetness-val" class="text-green-400">3/5</span>
+                    </div>
+                    <input type="range" id="sweetness-slider" min="1" max="5" value="3" oninput="updateTasteSliders()" class="w-full accent-green-400 cursor-pointer">
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-semibold">
+                        <span class="text-zinc-400">Säure / Frische</span>
+                        <span id="sourness-val" class="text-yellow-400">3/5</span>
+                    </div>
+                    <input type="range" id="sourness-slider" min="1" max="5" value="3" oninput="updateTasteSliders()" class="w-full accent-yellow-400 cursor-pointer">
                 </div>
             </div>
 
-            <div class="space-y-3">
-                <label class="block text-xs font-semibold text-zinc-400 uppercase">Geschmacksnotizen & Tags</label>
-                <div class="flex flex-wrap gap-2" id="flavor-tags-container">
-                    <!-- Tag buttons -->
-                </div>
+            <!-- Flavor Tags -->
+            <div class="space-y-2">
+                <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider">Geschmacksnoten / Tags</label>
+                <div class="flex flex-wrap gap-2" id="flavor-tags-container"></div>
             </div>
 
-            <div class="space-y-3">
-                <label class="block text-xs font-semibold text-zinc-400 uppercase">Deine Notiz</label>
-                <textarea id="detail-note" rows="2" placeholder="z.B. Schmeckt extrem fruchtig nach Apfel..." class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-green-500"></textarea>
+            <!-- Custom Note -->
+            <div class="space-y-2">
+                <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider">Deine Notizen & Fazit</label>
+                <textarea id="detail-note" rows="2" placeholder="z. B. Am besten eiskalt genießen! Extrem fruchtig..." class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-green-500"></textarea>
             </div>
 
-            <button onclick="saveDetailsModal()" class="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-2.5 rounded-xl transition-all">
-                Speichern
+            <button onclick="saveDetailsModal()" class="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-xl transition-all shadow-lg shadow-green-500/20">
+                Bewertung Speichern
             </button>
         </div>
     </div>
