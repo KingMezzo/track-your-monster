@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0f12">
+  <title>Monster Tracker</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { bg: '#0b0f12', neon: '#39ff14' } } }
+    };
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-bg text-slate-100 antialiased">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="flex items-center gap-2">
+      <span class="logo-claw" aria-hidden="true"></span>
+      <h1 class="text-lg font-extrabold tracking-wide">MONSTER <span class="text-neon">TRACKER</span></h1>
+    </div>
+    <div id="header-chip" class="chip" title="Koffein heute">0 / 400 mg</div>
+  </header>
+
+  <main class="app-main">
+
+    <!-- SCAN -->
+    <section id="view-scan" class="view">
+      <div class="panel">
+        <div id="reader-wrap" class="reader-wrap">
+          <div id="reader"></div>
+          <div id="reader-placeholder" class="reader-placeholder">
+            <svg viewBox="0 0 24 24" class="w-12 h-12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8M18 8v8"/></svg>
+            <p>Kamera ist aus</p>
+          </div>
+        </div>
+
+        <p id="scan-msg" class="scan-msg" role="status"></p>
+
+        <div class="flex gap-2 mt-3">
+          <button id="btn-scan-start" class="btn btn-neon flex-1" type="button">Kamera starten</button>
+          <button id="btn-scan-stop" class="btn btn-ghost flex-1 hidden" type="button">Kamera stoppen</button>
+        </div>
+      </div>
+
+      <form id="manual-form" class="panel" autocomplete="off">
+        <label for="manual-ean" class="label">Barcode manuell eingeben</label>
+        <div class="flex gap-2">
+          <input id="manual-ean" class="input flex-1" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="14" placeholder="z. B. 5060337500401">
+          <button class="btn btn-neon" type="submit">Suchen</button>
+        </div>
+        <p class="hint">EAN-8, EAN-13 oder UPC-A. Unbekannte Codes werden über OpenFoodFacts gesucht.</p>
+      </form>
+    </section>
+
+    <!-- VAULT -->
+    <section id="view-vault" class="view hidden">
+      <div class="section-head">
+        <h2>Vault</h2>
+        <p id="vault-summary" class="hint"></p>
+      </div>
+      <div id="vault-grid" class="vault-grid"></div>
+      <div id="vault-empty" class="empty hidden">
+        <p class="text-lg font-semibold">Noch keine Dosen im Vault</p>
+        <p class="hint">Scanne eine Dose, um sie hier zu sammeln.</p>
+        <button class="btn btn-neon mt-4" type="button" data-goto="scan">Zum Scanner</button>
+      </div>
+    </section>
+
+    <!-- HEALTH -->
+    <section id="view-health" class="view hidden">
+      <div class="section-head">
+        <h2>Health</h2>
+        <p class="hint">Heute, <span id="health-date"></span></p>
+      </div>
+
+      <div class="panel">
+        <div class="flex items-end justify-between gap-3">
+          <div>
+            <div class="big-number"><span id="health-total">0</span><span class="unit"> mg</span></div>
+            <p class="hint">von 400 mg Tageslimit</p>
+          </div>
+          <span id="health-badge" class="badge badge-ok">Im Rahmen</span>
+        </div>
+
+        <div class="progress mt-4" role="progressbar" aria-valuemin="0" aria-valuemax="400" aria-valuenow="0" id="health-progress">
+          <div id="health-bar" class="progress-bar" style="width:0%"></div>
+        </div>
+        <div class="flex justify-between hint mt-1">
+          <span>0</span>
+          <span id="health-remaining"></span>
+          <span>400</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="panel-title">Letzte 7 Tage</h3>
+        <div id="health-week" class="week"></div>
+      </div>
+
+      <div class="panel">
+        <h3 class="panel-title">Verlauf heute</h3>
+        <ul id="health-history" class="history"></ul>
+        <p id="health-history-empty" class="hint hidden">Heute noch nichts getrunken.</p>
+      </div>
+
+      <p class="hint px-1">Richtwert: Gesunde Erwachsene sollten nicht mehr als 400 mg Koffein pro Tag zu sich nehmen (EFSA). Das ist keine medizinische Beratung.</p>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view hidden">
+      <div class="section-head"><h2>Einstellungen</h2></div>
+
+      <div class="panel">
+        <h3 class="panel-title">Daten</h3>
+        <p class="hint mb-3">Alle Daten liegen nur in diesem Browser (LocalStorage). Beim Zurücksetzen werden Vault, Bewertungen, Notizen und Koffein-Verlauf gelöscht.</p>
+        <button id="btn-reset" class="btn btn-danger w-full" type="button">Alle Daten zurücksetzen</button>
+      </div>
+
+      <div class="panel">
+        <h3 class="panel-title">Info</h3>
+        <p class="hint">Monster Tracker · läuft komplett im Browser. Produktdaten ergänzt OpenFoodFacts.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav" aria-label="Hauptnavigation">
+    <button class="nav-btn active" data-view="scan" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8M18 8v8"/></svg>
+      <span>Scan</span>
+    </button>
+    <button class="nav-btn" data-view="vault" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>Vault</span>
+    </button>
+    <button class="nav-btn" data-view="health" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+      <span>Health</span>
+    </button>
+    <button class="nav-btn" data-view="settings" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <!-- Modal: Scan-Ergebnis -->
+  <div id="modal-scan" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
+    <div class="modal-card">
+      <div id="scan-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Modal: Unbekanntes Produkt -->
+  <div id="modal-unknown" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="unknown-title">
+    <div class="modal-card">
+      <h3 id="unknown-title" class="modal-title">Unbekannte Dose</h3>
+      <p class="hint mb-3">Barcode <span id="unknown-ean" class="text-neon font-mono"></span> wurde nicht gefunden. Du kannst die Dose selbst anlegen.</p>
+      <form id="unknown-form" autocomplete="off">
+        <label class="label" for="unknown-name">Name</label>
+        <input id="unknown-name" class="input w-full" type="text" maxlength="60" placeholder="z. B. Monster Ultra Gold" required>
+        <label class="label mt-3" for="unknown-mg">Koffein (mg pro Dose)</label>
+        <input id="unknown-mg" class="input w-full" type="number" min="0" max="500" value="160" required>
+        <div class="flex gap-2 mt-4">
+          <button type="button" class="btn btn-ghost flex-1" data-close="modal-unknown">Abbrechen</button>
+          <button type="submit" class="btn btn-neon flex-1">Anlegen</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Detail -->
+  <div id="modal-detail" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="detail-name">
+    <div class="modal-card modal-card-lg">
+      <div id="detail-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="database.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
