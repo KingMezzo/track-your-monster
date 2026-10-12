@@ -10,7 +10,7 @@ let wishlist = JSON.parse(localStorage.getItem(STORAGE_KEY_WISHLIST)) || [];
 let ratings = JSON.parse(localStorage.getItem(STORAGE_KEY_RATINGS)) || {};
 let history = JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY)) || [];
 
-let html5QrcodeScanner = null;
+let html5QrCode = null;
 let currentEditingBarcode = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -43,12 +43,10 @@ function switchTab(tabId) {
 
 // Fetch Product Info (Local DB first, OpenFoodFacts Fallback)
 async function fetchMonsterInfo(barcode) {
-    // 1. Check curated database
     if (MONSTER_DATABASE[barcode]) {
         return MONSTER_DATABASE[barcode];
     }
 
-    // 2. Fallback to OpenFoodFacts API
     try {
         const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
         const data = await response.json();
@@ -67,7 +65,6 @@ async function fetchMonsterInfo(barcode) {
         console.error("API Fehler:", err);
     }
 
-    // 3. Generic fallback
     return {
         id: barcode,
         name: `Monster Sorte (${barcode.slice(-4)})`,
@@ -95,7 +92,6 @@ async function addMonster(barcode) {
         };
     }
 
-    // Add to Health History
     history.unshift({
         barcode: barcode,
         name: productInfo.name,
@@ -275,7 +271,6 @@ function renderHealth() {
         badge.innerText = "Im grünen Bereich";
     }
 
-    // Render History List
     const historyList = document.getElementById('history-list');
     historyList.innerHTML = '';
 
@@ -284,7 +279,7 @@ function renderHealth() {
         return;
     }
 
-    history.slice(0, 10).forEach((item, index) => {
+    history.slice(0, 10).forEach((item) => {
         const dateObj = new Date(item.timestamp);
         const timeFormatted = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const dateFormatted = dateObj.toLocaleDateString();
@@ -307,23 +302,34 @@ function renderHealth() {
     });
 }
 
-// Scanner Controls
+// Scanner Controls (Direktstart für den nativen Browser-Berechtigungsdialog)
 function openScanner() {
     document.getElementById('scanner-modal').classList.remove('hidden');
     
-    html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-        fps: 10, 
-        qrbox: { width: 250, height: 150 } 
-    });
+    if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("reader");
+    }
     
-    html5QrcodeScanner.render((decodedText) => {
-        addMonster(decodedText);
-    }, (error) => {});
+    const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+    
+    html5QrCode.start(
+        { facingMode: "environment" }, 
+        config, 
+        (decodedText) => {
+            addMonster(decodedText);
+        },
+        (errorMessage) => {
+            // Scan-Fehler während des laufens ignorieren
+        }
+    ).catch(err => {
+        console.error("Kamera-Zugriff verweigert oder Fehler:", err);
+        alert("Kamera konnte nicht gestartet werden. Bitte erlaube den Zugriff in deinen Browsereinstellungen (HTTPS ist aktiv).");
+    });
 }
 
 function closeScanner() {
-    if (html5QrcodeScanner) {
-        html5QrcodeScanner.clear().catch(error => console.error(error));
+    if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().catch(err => console.error("Fehler beim Stoppen:", err));
     }
     document.getElementById('scanner-modal').classList.add('hidden');
 }
@@ -353,7 +359,6 @@ function openDetailsModal(barcode) {
 
     document.getElementById('detail-note').value = currentNote;
 
-    // Render Stars
     const starContainer = document.getElementById('star-rating');
     starContainer.innerHTML = '';
     for (let i = 1; i <= 5; i++) {
@@ -365,7 +370,6 @@ function openDetailsModal(barcode) {
         starContainer.appendChild(starBtn);
     }
 
-    // Render Flavor Tags
     const tagsContainer = document.getElementById('flavor-tags-container');
     tagsContainer.innerHTML = '';
     AVAILABLE_FLAVOR_TAGS.forEach(tag => {
@@ -389,7 +393,7 @@ function closeDetailsModal() {
 function setRatingStars(stars) {
     if (!ratings[currentEditingBarcode]) ratings[currentEditingBarcode] = { stars: 0, note: '', tags: [] };
     ratings[currentEditingBarcode].stars = stars;
-    openDetailsModal(currentEditingBarcode); // Refresh modal
+    openDetailsModal(currentEditingBarcode);
 }
 
 function toggleTag(tag) {
