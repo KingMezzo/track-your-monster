@@ -97,6 +97,19 @@ async function screenshot(name) {
   assert.equal(await evaluate('document.querySelectorAll(".catalog-card").length'), 32);
   await evaluate('Promise.all([...document.querySelectorAll(".catalog-card img")].map(img => {img.loading="eager";return img.decode()}))');
   assert.equal(await evaluate('[...document.querySelectorAll(".catalog-card img")].every(img=>img.naturalWidth>0)'), true);
+  const audit = await evaluate(`(() => {
+    const c=document.createElement('canvas'); c.width=1600;c.height=1400;
+    const x=c.getContext('2d');x.fillStyle='#eee';x.fillRect(0,0,c.width,c.height);
+    [...document.querySelectorAll('.catalog-card')].forEach((card,i)=>{
+      const img=card.querySelector('img'),left=(i%8)*200,top=Math.floor(i/8)*350;
+      x.fillStyle='#111';x.font='14px sans-serif';
+      card.dataset.catalog.match(/.{1,23}/g).forEach((s,j)=>x.fillText(s,left+8,top+20+j*18));
+      const h=260,w=img.naturalWidth/img.naturalHeight*h;
+      x.drawImage(img,left+(200-w)/2,top+65,w,h);
+    });return c.toDataURL('image/png').split(',')[1];
+  })()`);
+  fs.writeFileSync(path.join(temp,'picture-audit.png'),Buffer.from(audit,'base64'));
+  console.log('Picture audit:',path.join(temp,'picture-audit.png'));
   await screenshot('catalog-desktop');
   await input('#catalog-search', 'mango');
   assert.equal(await evaluate('document.querySelectorAll(".catalog-card").length'), 2);
@@ -116,7 +129,7 @@ async function screenshot(name) {
   await input('#manual-ean', '5060337500401');
   await evaluate('document.querySelector("#manual-form").requestSubmit()');
   await until('!document.querySelector("#modal-scan").classList.contains("hidden")');
-  assert.match(await evaluate('document.querySelector("#scan-modal-body img").getAttribute("src")'), /monster-original.webp$/);
+  assert.match(await evaluate('document.querySelector("#scan-modal-body img").getAttribute("src")'), /monster-ultra-white.webp$/);
   await input('#scan-catalog', 'pipeline-punch', 'change');
   assert.match(await evaluate('document.querySelector("#scan-modal-body img").getAttribute("src")'), /monster-pipeline-punch.webp$/);
   await click('#scan-confirm');
@@ -127,7 +140,7 @@ async function screenshot(name) {
   await input('#detail-note', 'Schmeckt gut.');
   await click('[data-close="modal-detail"]');
   await click('[data-view="health"]');
-  assert.equal(await evaluate('document.querySelector("#health-total").textContent'), '315');
+  assert.equal(await evaluate('document.querySelector("#health-total").textContent'), '305');
   // Unknown barcode while offline → catalog assignment → next scan works locally.
   await click('[data-view="scan"]');
   await evaluate('window.fetch=async()=>{throw new Error("offline test")};');
@@ -162,11 +175,11 @@ async function screenshot(name) {
     }
   }
   // A pre-existing collection keeps ratings/notes and replaces stale remote images.
-  await evaluate(`localStorage.setItem('monsterTracker.v1', JSON.stringify({cans:{'5060337500401':{count:2,rating:4,tags:['Fruchtig'],note:'Alte Notiz',first:1}},log:[],custom:{'5060337500401':{ean:'5060337500401',name:'Monster Energy',sub:'Original Green',mg:160,image:'https://old.openfoodfacts.org/photo.jpg'}}}));`);
+  await evaluate(`localStorage.removeItem('monsterTracker.barcodeMap.v2');localStorage.setItem('monsterTracker.barcodeMap.v1',JSON.stringify({'05060337500401':'original'}));localStorage.setItem('monsterTracker.v1', JSON.stringify({cans:{'5060337500401':{count:2,rating:4,tags:['Fruchtig'],note:'Alte Notiz',first:1}},log:[],custom:{'5060337500401':{ean:'5060337500401',name:'Monster Energy',sub:'Original Green',mg:160,image:'https://old.openfoodfacts.org/photo.jpg'}}}));`);
   await cdp('Page.reload');
   await until('!!window.MonsterDB && !!document.querySelector("#manual-form")');
   await click('[data-view="vault"]');
-  assert.match(await evaluate('document.querySelector(".can-card img").getAttribute("src")'), /monster-pipeline-punch.webp$/);
+  assert.match(await evaluate('document.querySelector(".can-card img").getAttribute("src")'), /monster-ultra-white.webp$/);
   await click('.can-card');
   assert.equal(await evaluate('document.querySelector("#detail-note").value'), 'Alte Notiz');
   assert.equal(await evaluate('document.querySelectorAll(".star-btn.on").length'), 4);

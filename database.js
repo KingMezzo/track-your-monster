@@ -2,14 +2,20 @@
 (function () {
   "use strict";
   const CATALOG = window.MonsterCatalog;
-  const MAP_KEY = "monsterTracker.barcodeMap.v1";
+  // v1 mixed automatic guesses with manual assignments; do not reuse those guesses.
+  const MAP_KEY = "monsterTracker.barcodeMap.v2";
   const OFF_URL = "https://world.openfoodfacts.org/api/v2/product/";
   const OFF_FIELDS = "product_name,brands,quantity,nutriments";
   const DEFAULT_ACCENT = "#b4df42";
 
   // Mehrere Länder-/Größen-Barcodes dürfen dieselbe Sorte referenzieren.
   // Hier nur gesicherte Zuordnungen eintragen; keine EANs aus Namen ableiten.
-  const BARCODE_MAP = { "5060337500401": "original" };
+  // Verified can GTINs: https://www.mcs.eu/Quick-Check/Quick-Check_Energy%20Drinks_H2024.pdf
+  const BARCODE_MAP = {
+    "5060337500401": "ultra-white",
+    "5060335635228": "original",
+    "5060517888510": "mango-loco"
+  };
   function readMappings() {
     try { return JSON.parse(localStorage.getItem(MAP_KEY)) || {}; }
     catch { return {}; }
@@ -24,14 +30,14 @@
     if (String(ean).startsWith("catalog:")) return String(ean).slice(8);
     const key = barcodeKey(ean);
     const custom = readMappings();
-    if (Object.hasOwn(custom, key)) return custom[key];
+    if (custom[key]?.origin === "manual") return custom[key].id;
     const known = Object.keys(BARCODE_MAP).find(code => barcodeKey(code) === key);
-    return known ? BARCODE_MAP[known] : null;
+    return known ? BARCODE_MAP[known] : custom[key]?.id || null;
   }
-  function linkBarcode(ean, id) {
+  function linkBarcode(ean, id, origin = "manual") {
     if (id && !byId(id)) return false;
     const mappings = readMappings();
-    mappings[barcodeKey(ean)] = id || "";
+    mappings[barcodeKey(ean)] = { id: id || "", origin };
     try { localStorage.setItem(MAP_KEY, JSON.stringify(mappings)); return true; }
     catch { return false; }
   }
@@ -40,19 +46,27 @@
       .replace(/[^a-z0-9]+/g, " ").trim();
   }
   function matchVariant(text) {
+    // The official White name "Zero Ultra" is accepted only as a full name.
+    // "Ultra Zero Sugar" alone can describe many different Ultra flavors.
+    if (/^(monster (energy )?)?zero ultra$/.test(normalize(text))) return byId("ultra-white");
     const value = " " + normalize(text) + " ";
     const matches = CATALOG.flatMap(p => p.aliases.map(alias => ({ p, alias: normalize(alias) })))
       .filter(({ alias }) => value.includes(" " + alias + " "))
       .sort((a, b) => b.alias.length - a.alias.length);
-    if (matches.length && !(matches[0].p.id === "original" && /zero|ultra|sugar/.test(value))) return matches[0].p;
-    if (/^(monster|monster energy|monster energy drink|monster energy original)$/.test(normalize(text))) return byId("original");
-    return null;
+    const candidates = matches.filter(m => m.p.id !== "original" ||
+      /^(monster (energy )?)?original( green)?( (500 ?ml|0 5 ?l))?$/.test(normalize(text)));
+    const ids = new Set(candidates.map(m => m.p.id));
+    return ids.size === 1 ? candidates[0].p : null;
   }
   function catalogFor(p) {
     const key = barcodeKey(p.ean || "");
     const mappings = readMappings();
-    if (Object.hasOwn(mappings, key)) return byId(mappings[key]);
-    return byId(mappedId(p.ean)) || byId(p.catalogId) || matchVariant((p.name || "") + " " + (p.sub || ""));
+    if (mappings[key]?.origin === "manual") return byId(mappings[key].id);
+    const mapped = byId(mappedId(p.ean));
+    if (mapped) return mapped;
+    // Old cached catalog IDs and generic names are not proof of a barcode match.
+    if (p.identificationVersion !== 2 && !String(p.ean).startsWith("catalog:")) return null;
+    return byId(p.catalogId);
   }
   function localImage(p) {
     const item = catalogFor(p);
@@ -85,7 +99,7 @@
       const brand = p.brands || "";
       if (!/monster/i.test(name + " " + brand)) return null;
       const variant = matchVariant(name);
-      if (variant) linkBarcode(ean, variant.id);
+      if (variant) linkBarcode(ean, variant.id, "automatic");
       const ml = parseVolumeMl(p.quantity);
       const caffeine = (p.nutriments || {}).caffeine_100g;
       const hasCaffeine = typeof caffeine === "number" && caffeine >= 0 && caffeine <= 0.1;
@@ -95,7 +109,7 @@
         sub: variant ? variant.sub : "", catalogId: variant ? variant.id : "",
         mg: Math.round(per100 * ml / 100), ml, estimated: !hasCaffeine,
         accent: variant ? variant.accent : DEFAULT_ACCENT,
-        source: "openfoodfacts"
+        source: "openfoodfacts", identificationVersion: 2
       };
     } finally { clearTimeout(timeout); }
   }
@@ -104,6 +118,6 @@
     CATALOG, BARCODE_MAP, MAP_KEY, DEFAULT_ACCENT,
     byId, getLocal, catalogFor, localImage, linkBarcode, matchVariant,
     resolve, fetchOFF, placeholder,
-    clearMappings() { localStorage.removeItem(MAP_KEY); }
+    clearMappings() { localStorage.removeItem(MAP_KEY); localStorage.removeItem("monsterTracker.barcodeMap.v1"); }
   };
 })();

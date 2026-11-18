@@ -1,5 +1,5 @@
 /* Bump the version whenever the app shell or the local catalog changes. */
-const CACHE = 'monster-app-v1';
+const CACHE = 'monster-app-v2';
 const ROOT = new URL('./', self.location.href);
 const HOME = new URL('index.html', ROOT).href;
 self.addEventListener('install', event => {

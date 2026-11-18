@@ -58,7 +58,11 @@
     const p = state.custom[ean] || MonsterDB.getLocal(ean) ||
       { ean: ean, name: "Unbekannte Dose", sub: "", mg: 160, accent: MonsterDB.DEFAULT_ACCENT };
     const item = MonsterDB.catalogFor(p);
-    return item ? Object.assign({}, p, { name: item.name, sub: item.sub, catalogId: item.id, accent: item.accent }) : p;
+    if (item) return Object.assign({}, p, { name: item.name, sub: item.sub, catalogId: item.id, accent: item.accent });
+    if (p.identificationVersion !== 2) return Object.assign({}, p, {
+      name: "Sorte nicht bestätigt", sub: "Barcode " + ean, catalogId: "", identificationWarning: true
+    });
+    return p;
   }
 
   function imageSrc(p) {
@@ -74,7 +78,7 @@
     if (!MonsterDB.linkBarcode(product.ean, id)) toast("Barcode-Zuordnung konnte nicht gespeichert werden");
     const updated = Object.assign({}, product, {
       name: item ? item.name : product.name, sub: item ? item.sub : product.sub,
-      catalogId: id, accent: item ? item.accent : product.accent, source: "custom"
+      catalogId: id, accent: item ? item.accent : product.accent, source: "custom", identificationVersion: 2
     });
     state.custom[product.ean] = updated;
     save();
@@ -460,6 +464,7 @@
         '<div class="stat"><b>' + (+p.mg || 0) + ' mg</b><span>pro Dose</span></div>' +
         '<div class="stat"><b>' + (c.count * (+p.mg || 0)) + ' mg</b><span>insgesamt</span></div>' +
       '</div>' +
+      (p.identificationWarning ? '<p class="hint">Diese ältere Zuordnung ist nicht bestätigt. Bitte wähle die Sorte erneut.</p>' : '') +
       '<label class="label" for="detail-catalog">Sorte / Dosenbild korrigieren</label><select id="detail-catalog" class="input w-full">' + catalogOptions((MonsterDB.catalogFor(p) || {}).id) + '</select>' +
       '<div class="section-label">Bewertung</div>' +
       '<div class="stars">' + stars + '</div>' +
@@ -569,7 +574,9 @@
     setScanMsg("Suche " + ean + " …");
     let product = null;
     try {
-      product = state.custom[ean] ? getProduct(ean) : await MonsterDB.resolve(ean);
+      const cached = state.custom[ean];
+      product = cached && (MonsterDB.catalogFor(cached) || cached.identificationVersion === 2)
+        ? getProduct(ean) : await MonsterDB.resolve(ean);
       if (product && product.source === "openfoodfacts") { state.custom[ean] = product; save(); }
     } catch (e) {
       setScanMsg("Online-Suche fehlgeschlagen (offline?). Du kannst die Dose manuell anlegen.", true);
@@ -577,7 +584,7 @@
       return;
     }
     setScanMsg("");
-    if (product) openScanModal(product);
+    if (product && !(product.source === "openfoodfacts" && !MonsterDB.catalogFor(product))) openScanModal(product);
     else openUnknownModal(ean);
   }
 
@@ -733,6 +740,23 @@
 
   /* ---------- Start ---------- */
   document.addEventListener("DOMContentLoaded", () => {
+    // Repair the previous release's incorrect White → Original assignment.
+    // Ratings, tags, notes and counts stay attached to the scanned barcode.
+    let repaired = false;
+    for (const ean of new Set([...Object.keys(state.custom), ...Object.keys(state.cans)])) {
+      const product = state.custom[ean] || {};
+      const local = MonsterDB.getLocal(ean);
+      if (product.identificationVersion !== 2 && local?.id === "ultra-white" &&
+          (!state.custom[ean] || product.catalogId === "original" || /original/i.test(product.sub || ""))) {
+        state.custom[ean] = Object.assign({}, product, local, { identificationVersion: 2 });
+        for (const entry of state.log.filter(entry => entry.ean === ean)) {
+          entry.name = "Monster Ultra White";
+          if (entry.mg === 160) entry.mg = local.mg;
+        }
+        repaired = true;
+      }
+    }
+    if (repaired) save();
     try { localStorage.removeItem(LS_IMG_KEY); } catch (e) { /* Browser-Speicher gesperrt */ }
     bindEvents();
     renderHeader();

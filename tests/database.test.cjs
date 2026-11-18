@@ -28,8 +28,10 @@ test('every local picture has exactly one catalog entry and exists on disk', () 
 });
 test('known barcodes work offline, including equivalent GTIN leading zero', async () => {
   const { db, requests } = setup();
-  assert.equal((await db.resolve('5060337500401')).id, 'original');
-  assert.equal((await db.resolve('05060337500401')).id, 'original');
+  assert.equal((await db.resolve('5060337500401')).id, 'ultra-white');
+  assert.equal((await db.resolve('05060337500401')).id, 'ultra-white');
+  assert.equal((await db.resolve('5060335635228')).id, 'original');
+  assert.equal((await db.resolve('5060517888510')).id, 'mango-loco');
   assert.equal(requests.length, 0);
 });
 test('specific flavors win, ambiguous zero sugar never guesses a can color', () => {
@@ -54,7 +56,7 @@ test('OFF metadata resolves a local image and remembers the barcode without requ
 });
 test('manual correction beats stale names, cached URLs, and existing catalog IDs', () => {
   const { db, storage } = setup();
-  const p = { ean: '123456789012', name: 'Monster Mango Loco', catalogId: 'mango-loco', image: 'https://old.test/photo.jpg' };
+  const p = { ean: '123456789012', name: 'Monster Mango Loco', catalogId: 'mango-loco', identificationVersion: 2, image: 'https://old.test/photo.jpg' };
   storage.set('monsterTracker.imgCache.v1', JSON.stringify({ [p.ean]: p.image }));
   assert.equal(db.localImage(p), 'monster_pictures/monster-mango-loco.webp');
   assert.ok(db.linkBarcode(p.ean, 'pipeline-punch'));
@@ -70,4 +72,31 @@ test('unrecognized products have no remote image and other brands are rejected',
   const { db } = setup({ product_name: 'Cola', brands: 'Other Brand', image_front_url: 'https://forbidden.test/photo.jpg' });
   assert.equal(await db.resolve('12345678'), null);
   assert.equal(db.localImage({ ean: '87654321', name: 'Unknown', image: 'https://old.test/image.jpg' }), '');
+});
+
+test('generic, conflicting and unsupported names never silently become Original', async () => {
+  const { db } = setup({ product_name: 'Monster Energy', brands: 'Monster' });
+  for (const name of ['Monster', 'Monster Energy', 'Monster Energy Drink', 'Monster Zero Sugar',
+    'Monster Ultra Zero Sugar', 'Monster Ultra Blue', 'Monster Absolutely Zero',
+    'Monster Original Ultra White', 'Monster Mango Loco Pipeline Punch']) {
+    const p = db.matchVariant(name);
+    assert.notEqual(p?.id, 'original', name);
+  }
+  assert.equal(db.matchVariant('Monster Mango Loco Pipeline Punch'), null);
+  const product = await db.resolve('1234567890123');
+  assert.equal(product.catalogId, '');
+  assert.equal(db.localImage(product), '');
+});
+
+test('known White barcode overrides legacy mistakes; unverified legacy guesses are discarded', async () => {
+  const { db, storage } = setup();
+  storage.set('monsterTracker.barcodeMap.v1', JSON.stringify({ '05060337500401': 'original' }));
+  const legacy = { ean: '5060337500401', name: 'Monster Energy', sub: 'Original Green', catalogId: 'original' };
+  assert.equal(db.catalogFor(legacy).id, 'ultra-white');
+  assert.equal(db.localImage(legacy), 'monster_pictures/monster-ultra-white.webp');
+  assert.equal(db.catalogFor({ ...legacy, ean: '1234567890123' }), null);
+  db.linkBarcode(legacy.ean, 'original', 'automatic');
+  assert.equal((await db.resolve(legacy.ean)).id, 'ultra-white');
+  db.linkBarcode(legacy.ean, 'pipeline-punch', 'manual');
+  assert.equal((await db.resolve(legacy.ean)).id, 'pipeline-punch');
 });
