@@ -55,23 +55,30 @@
   }
 
   function getProduct(ean) {
-    return state.custom[ean] || MonsterDB.getLocal(ean) ||
-      { ean: ean, name: "Unbekannte Dose", sub: "", mg: 160, accent: MonsterDB.DEFAULT_ACCENT, image: "" };
+    const p = state.custom[ean] || MonsterDB.getLocal(ean) ||
+      { ean: ean, name: "Unbekannte Dose", sub: "", mg: 160, accent: MonsterDB.DEFAULT_ACCENT };
+    const item = MonsterDB.catalogFor(p);
+    return item ? Object.assign({}, p, { name: item.name, sub: item.sub, catalogId: item.id, accent: item.accent }) : p;
   }
 
   function imageSrc(p) {
-    return p.image || MonsterDB.cachedImage(p.ean) || MonsterDB.placeholder(accentOf(p), p.sub);
+    return MonsterDB.localImage(p) || MonsterDB.placeholder(accentOf(p));
   }
-  function needsImage(p) {
-    return !p.image && !MonsterDB.cachedImage(p.ean);
+  function catalogOptions(selected) {
+    return '<option value="">Eigene / andere Sorte</option>' + MonsterDB.CATALOG.slice()
+      .sort((a, b) => a.sub.localeCompare(b.sub, "de")).map(p =>
+        '<option value="' + esc(p.id) + '"' + (p.id === selected ? ' selected' : '') + '>' + esc(p.sub) + '</option>').join("");
   }
-
-  /** Fehlende Produktbilder nachladen und einsetzen */
-  function hydrateImages(root) {
-    $$('img[data-need-img="1"]', root).forEach(img => {
-      img.removeAttribute("data-need-img");
-      MonsterDB.fetchImage(img.dataset.ean).then(url => { if (url && img.isConnected) img.src = url; });
+  function assignCatalog(product, id) {
+    const item = MonsterDB.byId(id);
+    if (!MonsterDB.linkBarcode(product.ean, id)) toast("Barcode-Zuordnung konnte nicht gespeichert werden");
+    const updated = Object.assign({}, product, {
+      name: item ? item.name : product.name, sub: item ? item.sub : product.sub,
+      catalogId: id, accent: item ? item.accent : product.accent, source: "custom"
     });
+    state.custom[product.ean] = updated;
+    save();
+    return updated;
   }
   function bindImgFallback(root) {
     root.addEventListener("error", e => {
@@ -107,7 +114,7 @@
 
   /* ---------- Aktionen ---------- */
   function addCan(ean, product) {
-    if (product.source && product.source !== "local") state.custom[ean] = product;
+    state.custom[ean] = product;
     const c = state.cans[ean] || (state.cans[ean] = { count: 0, rating: 0, tags: [], note: "", first: Date.now() });
     c.count += 1;
     c.last = Date.now();
@@ -154,10 +161,15 @@
   function showView(name) {
     if (name !== "scan") stopScanner();
     $$(".view").forEach(v => v.classList.toggle("hidden", v.id !== "view-" + name));
-    $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.view === name));
+    $$(".nav-btn").forEach(b => {
+      b.classList.toggle("active", b.dataset.view === name);
+      if (b.dataset.view === name) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
     window.scrollTo({ top: 0 });
     if (name === "vault") renderVault();
     if (name === "health") renderHealth();
+    if (name === "catalog") renderCatalog();
   }
 
   /* ---------- Rendering: Header ---------- */
@@ -167,6 +179,42 @@
     chip.textContent = total + " / " + LIMIT + " mg";
     chip.classList.toggle("warn", statusFor(total) === "warn");
     chip.classList.toggle("over", statusFor(total) === "over");
+    const tried = triedCatalogIds().size;
+    $("#home-tried").textContent = tried;
+    $("#home-total").textContent = MonsterDB.CATALOG.length;
+    $("#catalog-nav-count").textContent = MonsterDB.CATALOG.length;
+  }
+
+  /* ---------- Alle Sorten ---------- */
+  let catalogLine = "Alle";
+  function triedCatalogIds() {
+    return new Set(Object.keys(state.cans).map(ean => MonsterDB.catalogFor(getProduct(ean)))
+      .filter(Boolean).map(p => p.id));
+  }
+  function renderCatalog() {
+    const tried = triedCatalogIds();
+    const query = $("#catalog-search").value.trim().toLocaleLowerCase("de");
+    const status = $("#catalog-status").value;
+    const items = MonsterDB.CATALOG.filter(p =>
+      (catalogLine === "Alle" || p.line === catalogLine) &&
+      (p.sub + " " + p.line).toLocaleLowerCase("de").includes(query) &&
+      (status === "all" || (status === "tried" ? tried.has(p.id) : !tried.has(p.id)))
+    ).sort((a, b) => a.sub.localeCompare(b.sub, "de"));
+    $("#catalog-tried").textContent = tried.size + " / " + MonsterDB.CATALOG.length;
+    $("#catalog-progress").style.width = (tried.size / MonsterDB.CATALOG.length * 100) + "%";
+    $("#catalog-summary").textContent = items.length + (items.length === 1 ? " Sorte" : " Sorten");
+    $("#catalog-empty").classList.toggle("hidden", items.length > 0);
+    $("#catalog-filters").innerHTML = ["Alle", ...new Set(MonsterDB.CATALOG.map(p => p.line))].map(line =>
+      '<button type="button" class="filter-btn' + (catalogLine === line ? ' selected' : '') + '" data-line="' + esc(line) + '" aria-pressed="' + (catalogLine === line) + '">' + esc(line) + '</button>'
+    ).join("");
+    $("#catalog-grid").innerHTML = items.map(p =>
+      '<button type="button" class="catalog-card" data-catalog="' + esc(p.id) + '" style="--accent:' + esc(p.accent) + '" aria-label="Monster ' + esc(p.sub) + ' ansehen">' +
+        '<span class="catalog-card-top"><span>' + esc(p.line) + '</span>' +
+        (tried.has(p.id) ? '<span class="tried-label">✓ Probiert</span>' : '<span class="untried-label">Noch offen</span>') + '</span>' +
+        '<span class="catalog-image"><img src="' + esc(p.image) + '" alt="Monster ' + esc(p.sub) + ' Dose" loading="lazy" data-ean="' + esc(p.ean) + '"></span>' +
+        '<span class="catalog-card-bottom"><span class="catalog-card-name">' + esc(p.sub) + '</span><span class="card-plus" aria-hidden="true">+</span></span>' +
+      '</button>'
+    ).join("");
   }
 
   /* ---------- Rendering: Vault ---------- */
@@ -193,7 +241,7 @@
       return (
         '<div class="can-card" style="--accent:' + esc(accentOf(p)) + '" data-ean="' + esc(ean) + '" role="button" tabindex="0" aria-label="' + esc(p.name + " " + (p.sub || "")) + ' Details">' +
           '<span class="can-count">×' + c.count + '</span>' +
-          '<div class="can-img-wrap"><img src="' + esc(imageSrc(p)) + '" alt="" loading="lazy" data-ean="' + esc(ean) + '"' + (needsImage(p) ? ' data-need-img="1"' : '') + '></div>' +
+          '<div class="can-img-wrap"><img src="' + esc(imageSrc(p)) + '" alt="" loading="lazy" data-ean="' + esc(ean) + '"></div>' +
           '<div class="can-name">' + esc(p.name) + (p.sub ? '<br><span style="color:var(--muted);font-weight:600">' + esc(p.sub) + '</span>' : '') + '</div>' +
           '<div class="can-meta"><span>' + (+p.mg || 0) + ' mg / Dose</span><span class="can-stars">' + stars + '</span></div>' +
           '<div class="can-controls">' +
@@ -205,7 +253,6 @@
       );
     }).join("");
 
-    hydrateImages(grid);
   }
 
   /* ---------- Rendering: Health ---------- */
@@ -285,14 +332,25 @@
     renderHeader();
     if (!$("#view-vault").classList.contains("hidden")) renderVault();
     if (!$("#view-health").classList.contains("hidden")) renderHealth();
-    if (detailEan && !$("#modal-detail").classList.contains("hidden")) renderDetail();
+    if (!$("#view-catalog").classList.contains("hidden")) renderCatalog();
+    if (detailEan && !$("#modal-detail").classList.contains("hidden") && document.activeElement.id !== "detail-note") renderDetail();
   }
 
   /* ---------- Modals ---------- */
-  function openModal(id) { $("#" + id).classList.remove("hidden"); document.body.style.overflow = "hidden"; }
+  let modalTrigger = null;
+  function openModal(id) {
+    if (!$$(".modal").some(m => !m.classList.contains("hidden"))) modalTrigger = document.activeElement;
+    const modal = $("#" + id);
+    modal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+    modal.querySelector("button, input, select, textarea").focus();
+  }
   function closeModal(id) {
     $("#" + id).classList.add("hidden");
-    if (!$$(".modal").some(m => !m.classList.contains("hidden"))) document.body.style.overflow = "";
+    if (!$$(".modal").some(m => !m.classList.contains("hidden"))) {
+      document.body.style.overflow = "";
+      if (modalTrigger && modalTrigger.isConnected) modalTrigger.focus();
+    }
     if (id === "modal-detail") detailEan = null;
   }
 
@@ -301,33 +359,54 @@
     const total = todayTotal();
     const after = total + (+product.mg || 0);
     const st = statusFor(after);
-    const note = product.source === "openfoodfacts"
-      ? '<p class="hint" style="text-align:center">Quelle: OpenFoodFacts – Koffeinwert ggf. prüfen.</p>' : "";
+    const item = MonsterDB.catalogFor(product);
+    const note = product.estimated
+      ? '<p class="hint">Koffein ist ein Richtwert. Bitte mit der Angabe auf deiner Dose abgleichen.</p>' : "";
 
     $("#scan-modal-body").innerHTML =
       '<div class="modal-hero" style="--accent:' + esc(accentOf(product)) + '">' +
-        '<img src="' + esc(imageSrc(product)) + '" alt="" data-ean="' + esc(product.ean) + '"' + (needsImage(product) ? ' data-need-img="1"' : '') + '>' +
+        '<img src="' + esc(imageSrc(product)) + '" alt="" data-ean="' + esc(product.ean) + '">' +
         '<div class="name" id="scan-modal-title">' + esc(product.name) + '</div>' +
         (product.sub ? '<div class="sub">' + esc(product.sub) + '</div>' : '') +
       '</div>' +
+      (!String(product.ean).startsWith("catalog:") ? '<label class="label" for="scan-catalog">Sorte / Dosenbild zuordnen</label><select id="scan-catalog" class="input w-full">' + catalogOptions(item && item.id) + '</select>' : '') +
+      '<label class="label mt-3" for="scan-mg">Koffein (mg pro Dose)</label><input id="scan-mg" class="input w-full" type="number" min="0" max="500" value="' + (+product.mg || 0) + '">' +
       '<div class="stat-row">' +
         '<div class="stat"><b>' + (+product.mg || 0) + ' mg</b><span>Koffein</span></div>' +
         '<div class="stat"><b>' + total + ' mg</b><span>heute bisher</span></div>' +
         '<div class="stat ' + (st === "ok" ? "" : st) + '"><b>' + after + ' mg</b><span>danach</span></div>' +
       '</div>' +
-      (after > LIMIT ? '<div class="notice">Mit dieser Dose würdest du das Tageslimit von ' + LIMIT + ' mg überschreiten.</div>' : "") +
+      '<div id="scan-limit-notice" class="notice' + (after > LIMIT ? '' : ' hidden') + '">Mit dieser Dose würdest du den Tagesrichtwert von ' + LIMIT + ' mg überschreiten.</div>' +
       note +
       '<div class="flex gap-2 mt-3" style="display:flex;gap:8px">' +
         '<button type="button" class="btn btn-ghost" style="flex:1" data-close="modal-scan">Abbrechen</button>' +
         '<button type="button" class="btn btn-neon" style="flex:1" id="scan-confirm">Getrunken (+1)</button>' +
       '</div>';
 
+    $("#scan-catalog")?.addEventListener("change", e => {
+      const updated = assignCatalog(product, e.target.value);
+      openScanModal(updated);
+      $("#scan-catalog").focus();
+      renderAll();
+    });
+    $("#scan-mg").addEventListener("input", e => {
+      if (!e.target.checkValidity() || e.target.value === "") return;
+      product = Object.assign({}, product, { mg: Number(e.target.value), estimated: false });
+      const after = total + product.mg;
+      const stats = $$(".stat", $("#scan-modal-body"));
+      $("b", stats[0]).textContent = product.mg + " mg";
+      $("b", stats[2]).textContent = after + " mg";
+      stats[2].className = "stat " + statusFor(after);
+      $("#scan-limit-notice").classList.toggle("hidden", after <= LIMIT);
+    });
     $("#scan-confirm").addEventListener("click", () => {
+      const input = $("#scan-mg");
+      if (!input.reportValidity() || input.value === "") { input.focus(); return; }
+      product = Object.assign({}, product, { mg: Number(input.value) });
       addCan(product.ean, product);
       closeModal("modal-scan");
-      toast(product.name + " zum Vault hinzugefügt");
+      toast((product.sub || product.name) + " zur Sammlung hinzugefügt");
     });
-    hydrateImages($("#scan-modal-body"));
     openModal("modal-scan");
   }
 
@@ -338,6 +417,7 @@
     $("#unknown-ean").textContent = ean;
     $("#unknown-name").value = "";
     $("#unknown-mg").value = 160;
+    $("#unknown-catalog").innerHTML = catalogOptions("");
     openModal("modal-unknown");
     setTimeout(() => $("#unknown-name").focus(), 50);
   }
@@ -371,7 +451,7 @@
 
     body.innerHTML =
       '<div class="modal-hero" style="--accent:' + esc(accentOf(p)) + '">' +
-        '<img src="' + esc(imageSrc(p)) + '" alt="" data-ean="' + esc(ean) + '"' + (needsImage(p) ? ' data-need-img="1"' : '') + '>' +
+        '<img src="' + esc(imageSrc(p)) + '" alt="" data-ean="' + esc(ean) + '">' +
         '<div class="name" id="detail-name">' + esc(p.name) + '</div>' +
         (p.sub ? '<div class="sub">' + esc(p.sub) + '</div>' : '') +
         '<span class="count-pill">×' + c.count + ' getrunken</span>' +
@@ -380,7 +460,8 @@
         '<div class="stat"><b>' + (+p.mg || 0) + ' mg</b><span>pro Dose</span></div>' +
         '<div class="stat"><b>' + (c.count * (+p.mg || 0)) + ' mg</b><span>insgesamt</span></div>' +
       '</div>' +
-      '<div class="section-label" style="margin-top:4px">Bewertung</div>' +
+      '<label class="label" for="detail-catalog">Sorte / Dosenbild korrigieren</label><select id="detail-catalog" class="input w-full">' + catalogOptions((MonsterDB.catalogFor(p) || {}).id) + '</select>' +
+      '<div class="section-label">Bewertung</div>' +
       '<div class="stars">' + stars + '</div>' +
       '<div class="section-label">Geschmack &amp; Tags</div>' +
       '<div class="tags">' + tags + '</div>' +
@@ -391,7 +472,11 @@
         '<button type="button" class="btn btn-neon" style="flex:1" data-close="modal-detail">Fertig</button>' +
       '</div>';
 
-    hydrateImages(body);
+    $("#detail-catalog").addEventListener("change", e => {
+      assignCatalog(p, e.target.value);
+      renderAll();
+      $("#detail-catalog").focus();
+    });
     const note = $("#detail-note");
     note.addEventListener("input", () => { c.note = note.value; save(); });
     $("#detail-minus").addEventListener("click", () => { removeCan(ean); });
@@ -476,15 +561,16 @@
   /* ---------- Barcode verarbeiten ---------- */
   async function handleEan(raw) {
     const ean = String(raw || "").replace(/\D/g, "");
-    if (ean.length < 8 || ean.length > 14) {
+    if (![8, 12, 13, 14].includes(ean.length)) {
       toast("Ungültiger Barcode");
-      setScanMsg("Bitte einen gültigen Barcode (8–14 Ziffern) eingeben.", true);
+      setScanMsg("Bitte 8, 12, 13 oder 14 Ziffern eingeben.", true);
       return;
     }
     setScanMsg("Suche " + ean + " …");
     let product = null;
     try {
-      product = state.custom[ean] ? Object.assign({ source: "custom" }, state.custom[ean]) : await MonsterDB.resolve(ean);
+      product = state.custom[ean] ? getProduct(ean) : await MonsterDB.resolve(ean);
+      if (product && product.source === "openfoodfacts") { state.custom[ean] = product; save(); }
     } catch (e) {
       setScanMsg("Online-Suche fehlgeschlagen (offline?). Du kannst die Dose manuell anlegen.", true);
       openUnknownModal(ean);
@@ -511,7 +597,37 @@
     });
     document.addEventListener("keydown", e => {
       if (e.key === "Escape") $$(".modal").forEach(m => { if (!m.classList.contains("hidden")) closeModal(m.id); });
+      if (e.key === "Tab") {
+        const modal = $$(".modal").find(m => !m.classList.contains("hidden"));
+        if (!modal) return;
+        const focusable = $$('button, input, select, textarea, [tabindex="0"]', modal).filter(el => !el.disabled);
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
     });
+
+    $("#catalog-search").addEventListener("input", renderCatalog);
+    $("#catalog-status").addEventListener("change", renderCatalog);
+    $("#catalog-filters").addEventListener("click", e => {
+      const button = e.target.closest("[data-line]");
+      if (!button) return;
+      catalogLine = button.dataset.line;
+      renderCatalog();
+      $$("[data-line]").find(b => b.dataset.line === catalogLine).focus();
+    });
+    $("#catalog-clear").addEventListener("click", () => {
+      catalogLine = "Alle";
+      $("#catalog-search").value = "";
+      $("#catalog-status").value = "all";
+      renderCatalog();
+      $("#catalog-search").focus();
+    });
+    $("#catalog-grid").addEventListener("click", e => {
+      const card = e.target.closest("[data-catalog]");
+      if (card) openScanModal(MonsterDB.byId(card.dataset.catalog));
+    });
+    bindImgFallback($("#catalog-grid"));
 
     // Scanner
     $("#btn-scan-start").addEventListener("click", startScanner);
@@ -568,18 +684,23 @@
       }
     });
 
-    // Unbekanntes Produkt anlegen
+    // Unbekannten Barcode mit einem lokalen Dosenbild verknüpfen.
+    $("#unknown-catalog").addEventListener("change", e => {
+      const item = MonsterDB.byId(e.target.value);
+      $("#unknown-name").value = item ? "Monster " + item.sub : "";
+      $("#unknown-mg").value = item ? item.mg : 160;
+    });
     $("#unknown-form").addEventListener("submit", e => {
       e.preventDefault();
       const name = $("#unknown-name").value.trim();
       const mg = Math.max(0, Math.min(500, parseInt($("#unknown-mg").value, 10) || 0));
       if (!name || !unknownEan) return;
-      const product = {
+      let product = {
         ean: unknownEan, name: name, sub: "", mg: mg, ml: 0,
         accent: MonsterDB.DEFAULT_ACCENT, image: "", source: "custom"
       };
-      state.custom[unknownEan] = product;
-      save();
+      const selected = $("#unknown-catalog").value;
+      product = assignCatalog(product, selected);
       closeModal("modal-unknown");
       openScanModal(product);
     });
@@ -593,7 +714,7 @@
     // Reset
     $("#btn-reset").addEventListener("click", () => {
       if (!confirm("Wirklich ALLE Daten löschen? Vault, Bewertungen, Notizen und Koffein-Verlauf gehen unwiderruflich verloren.")) return;
-      try { localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_IMG_KEY); } catch (e) { /* ignorieren */ }
+      try { localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_IMG_KEY); MonsterDB.clearMappings(); } catch (e) { /* ignorieren */ }
       state = { cans: {}, log: [], custom: {} };
       detailEan = null;
       $$(".modal").forEach(m => m.classList.add("hidden"));
@@ -612,6 +733,7 @@
 
   /* ---------- Start ---------- */
   document.addEventListener("DOMContentLoaded", () => {
+    try { localStorage.removeItem(LS_IMG_KEY); } catch (e) { /* Browser-Speicher gesperrt */ }
     bindEvents();
     renderHeader();
     showView("scan");
