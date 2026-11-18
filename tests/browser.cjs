@@ -52,18 +52,18 @@ async function screenshot(name) {
 }
 (async () => {
   server = http.createServer((req, res) => {
-    const relative = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).replace(/^\/+/, '') || 'index.html';
+    const relative = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).replace(/^\/track-your-monster\//, '').replace(/^\/+/, '') || 'index.html';
     const file = path.resolve(root, relative);
     if (!file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
     try {
       const body = fs.readFileSync(file);
-      const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webp': 'image/webp' };
+      const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webp': 'image/webp', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
       res.writeHead(200, { 'Content-Type': (types[path.extname(file)] || 'application/octet-stream') + (file.endsWith('.webp') ? '' : '; charset=utf-8') });
       res.end(body);
     } catch { res.writeHead(404).end(); }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const url = 'http://127.0.0.1:' + server.address().port;
+  const url = 'http://127.0.0.1:' + server.address().port + '/track-your-monster/';
   browser = spawn(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--remote-debugging-port=0', '--user-data-dir=' + path.join(temp, 'profile'), 'about:blank'], { windowsHide: true, stdio: 'ignore' });
   browser.on('error', error => { console.error(error.message); process.exitCode = 1; });
   const portFile = path.join(temp, 'profile', 'DevToolsActivePort');
@@ -87,6 +87,10 @@ async function screenshot(name) {
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1080, deviceScaleFactor: 1, mobile: false });
   await cdp('Page.navigate', { url });
   await until('!!window.MonsterDB && !!document.querySelector("#manual-form")');
+  await evaluate('navigator.serviceWorker.ready');
+  await until('!!navigator.serviceWorker.controller');
+  const installability = await cdp('Page.getInstallabilityErrors');
+  assert.deepEqual(installability.installabilityErrors, [], 'PWA installability criteria');
   await pause(200);
   await screenshot('scan-desktop');
   await click('[data-view="catalog"]');
@@ -166,6 +170,17 @@ async function screenshot(name) {
   await click('.can-card');
   assert.equal(await evaluate('document.querySelector("#detail-note").value'), 'Alte Notiz');
   assert.equal(await evaluate('document.querySelectorAll(".star-btn.on").length'), 4);
+  await click('[data-close="modal-detail"]');
+  await cdp('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+  await cdp('Page.reload');
+  await until('!!window.MonsterDB && !!document.querySelector("#manual-form")');
+  assert.equal(await evaluate('typeof Html5Qrcode'), 'function', 'Scanner loads offline');
+  await click('[data-view="catalog"]');
+  await evaluate('Promise.all([...document.querySelectorAll(".catalog-card img")].map(img => {img.loading="eager";return img.decode()}))');
+  assert.equal(await evaluate('document.querySelectorAll(".catalog-card").length'), 32);
+  await click('[data-view="vault"]');
+  assert.equal(await evaluate('document.querySelectorAll(".can-card").length'), 1, 'Existing collection survives offline launch');
+  console.log('PASS: Installable manifest, scoped service worker, offline restart, all 32 photos and local scanner.');
   assert.ok(requests.filter(u => /openfoodfacts/i.test(u)).every(u => !/image|photo/.test(u)), 'No OFF photo requests');
   assert.deepEqual(errors, [], 'No uncaught browser exceptions');
   console.log('PASS: 32 local photos, filters, scan, correction, offline assignment, persistence, ratings, notes, caffeine, desktop/mobile layouts.');

@@ -7,6 +7,12 @@
   <meta name="description" content="Deine Monster-Sammlung. Dosen scannen, Sorten entdecken und deinen Geschmack festhalten.">
   <title>Track your Monster — Deine Dosensammlung</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Monster">
 </head>
 <body>
   <a class="skip-link" href="#main">Zum Inhalt</a>
@@ -105,6 +111,7 @@
 
     <section id="view-settings" class="view hidden" aria-labelledby="settings-title">
       <div class="page-heading"><div><p class="eyebrow">ALLES AN SEINEM PLATZ</p><h1 id="settings-title">EINSTELLUNGEN<span class="text-neon">.</span></h1></div></div>
+      <div class="panel"><h2>Dein Dosenregal. Als App.</h2><p id="install-help" class="hint">Installiere die App über das Menü deines Browsers.</p><button id="btn-install" class="btn btn-neon mt-4 hidden" type="button">App installieren</button><p id="offline-help" class="hint">Nach dem ersten Laden sind Sammlung, Sortenbilder und Scanner auch offline verfügbar. Für die Suche nach neuen Barcodes braucht die App Internet.</p></div>
       <div class="settings-layout"><div class="panel"><h2>Bleibt bei dir.</h2><p class="hint">Sammlung, Bewertungen, Notizen und Barcode-Zuordnungen werden in diesem Browser gespeichert. Es gibt kein Konto und keine Synchronisierung.</p><h3 class="section-label">Produktbilder &amp; Barcodes</h3><p class="hint">Die Dosenbilder stammen aus dem lokalen Bilderordner. OpenFoodFacts ergänzt Produktnamen und Nährwerte für unbekannte Barcodes. Du kannst die Sorte bei jedem Eintrag selbst korrigieren.</p></div><div class="panel"><h2>Neu anfangen.</h2><p class="hint">Löscht die gesamte Sammlung, Bewertungen, Notizen, den Koffeinverlauf und deine gespeicherten Barcode-Zuordnungen.</p><button id="btn-reset" class="btn btn-danger mt-4" type="button">Alle Daten zurücksetzen</button></div></div>
     </section>
     <footer class="app-footer"><span>TRACK YOUR MONSTER</span><span>Eine Sammlung. Ganz dein Geschmack.</span></footer>
@@ -114,9 +121,10 @@
   <div id="modal-unknown" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="unknown-title"><div class="modal-card"><button class="modal-close" type="button" data-close="modal-unknown" aria-label="Schließen">×</button><p class="eyebrow">NEUER FUND</p><h2 id="unknown-title" class="modal-title">Welche Dose ist das?</h2><p class="hint mb-3">Barcode <span id="unknown-ean" class="barcode-label"></span> ist noch nicht bekannt. Wähle eine Sorte oder lege eine eigene an.</p><form id="unknown-form" autocomplete="off"><label class="label" for="unknown-catalog">Sorte aus dem Regal</label><select id="unknown-catalog" class="input w-full"></select><label class="label mt-3" for="unknown-name">Name</label><input id="unknown-name" class="input w-full" type="text" maxlength="80" placeholder="z. B. Monster Ultra Gold" required><label class="label mt-3" for="unknown-mg">Koffein (mg pro Dose)</label><input id="unknown-mg" class="input w-full" type="number" min="0" max="500" value="160" required><p class="hint">Bitte mit der Dose abgleichen. Die vorgeschlagenen Werte sind Richtwerte.</p><div class="flex gap-2 mt-4"><button type="button" class="btn btn-ghost flex-1" data-close="modal-unknown">Abbrechen</button><button type="submit" class="btn btn-neon flex-1">Zuordnen</button></div></form></div></div>
   <div id="modal-detail" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="detail-name"><div class="modal-card modal-card-lg"><button class="modal-close" type="button" data-close="modal-detail" aria-label="Schließen">×</button><div id="detail-body"></div></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="vendor/html5-qrcode.min.js"></script>
   <script src="catalog.js"></script>
   <script src="database.js"></script>
   <script src="app.js"></script>
+  <script src="pwa.js"></script>
 </body>
 </html>
